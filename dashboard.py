@@ -348,31 +348,27 @@ if st.session_state.engine_results is not None:
         # Gauges
         c1, c2, c3 = st.columns(3)
         
-        def make_gauge(title, val):
-            fig = go.Figure(go.Indicator(
-                mode = "gauge+number",
-                value = val,
-                domain = {'x': [0, 1], 'y': [0, 1]},
-                title = {'text': title},
-                gauge = {
-                    'axis': {'range': [-3, 3]},
-                    'bar': {'color': "black"},
-                    'steps': [
-                        {'range': [-3, -1], 'color': "lightcoral"},
-                        {'range': [-1, 1], 'color': "lightgray"},
-                        {'range': [1, 3], 'color': "lightgreen"}
-                    ],
-                }
-            ))
-            fig.update_layout(height=250, margin=dict(l=10, r=10, t=40, b=10))
-            return fig
+        def make_indicator(title, val):
+            if val < -1:
+                color = "#ff9999" # light coral
+            elif val > 1:
+                color = "#99ff99" # light green
+            else:
+                color = "#f0f0f0" # light gray
+                
+            st.markdown(f"""
+            <div style="text-align: center; padding: 20px; border-radius: 10px; background-color: {color}; color: black; border: 1px solid #ddd; margin-bottom: 20px;">
+                <h4 style="margin: 0; padding-bottom: 10px;">{title}</h4>
+                <h2 style="margin: 0;">{val:.2f}</h2>
+            </div>
+            """, unsafe_allow_html=True)
             
         with c1:
-            st.plotly_chart(make_gauge("Oil Signal", comm_data.get("Oil_Signal", 0)), use_container_width=True)
+            make_indicator("Oil Signal", comm_data.get("Oil_Signal", 0))
         with c2:
-            st.plotly_chart(make_gauge("BDI Signal", comm_data.get("BDI_Signal", 0)), use_container_width=True)
+            make_indicator("BDI Signal", comm_data.get("BDI_Signal", 0))
         with c3:
-            st.plotly_chart(make_gauge("CuGold Signal", comm_data.get("CuGold_Signal", 0)), use_container_width=True)
+            make_indicator("CuGold Signal", comm_data.get("CuGold_Signal", 0))
             
         st.markdown("#### Raw Market Data")
         raw_market = st.session_state.macro_data["market_data"]
