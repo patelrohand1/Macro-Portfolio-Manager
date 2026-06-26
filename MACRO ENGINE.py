@@ -278,15 +278,34 @@ class MacroEngine:
             })
 
         df = pd.DataFrame(results).set_index("Ticker")
-        print(f"\n>> Regime: {classification.upper()} | Turnover: {turnover*100:.2f}%\n")
-        print("Bucket scores:")
-        for bucket, value in regime["Bucket_Scores"].items():
-            print(f"  - {bucket}: {value:.3f}")
+        
+        return {
+            "regime": regime,
+            "classification": classification,
+            "themes": themes,
+            "raw_tilts": raw_tilts,
+            "mrc_mults": mrc_mults,
+            "final_weights": final_weights,
+            "turnover": turnover,
+            "results_df": df
+        }
 
-        df["Neutral"] = (df["Neutral"] * 100).map("{:.2f}%".format)
-        df["Raw_Tilt"] = (df["Raw_Tilt"] * 100).map("{:+.2f}%".format)
-        df["Final_Wt"] = (df["Final_Wt"] * 100).map("{:.2f}%".format)
-        print(df.to_string())
+def print_pipeline_results(results):
+    classification = results["classification"]
+    turnover = results["turnover"]
+    regime = results["regime"]
+    df = results["results_df"].copy()
+
+    print(f"\n>> Regime: {classification.upper()} | Turnover: {turnover*100:.2f}%\n")
+    print("Bucket scores:")
+    for bucket, value in regime["Bucket_Scores"].items():
+        print(f"  - {bucket}: {value:.3f}")
+
+    df["Neutral"] = (df["Neutral"] * 100).map("{:.2f}%".format)
+    df["Raw_Tilt"] = (df["Raw_Tilt"] * 100).map("{:+.2f}%".format)
+    df["Final_Wt"] = (df["Final_Wt"] * 100).map("{:.2f}%".format)
+    print(df.to_string())
+
 
 
 def write_live_outputs(base_dir, current_macro, historical_df, commodity_signals, technical_data):
@@ -370,7 +389,7 @@ if __name__ == "__main__":
     prev_weights = engine.neutral_weights # Or load from your 'Portfolio.csv'
     
     # Execute the Pipeline
-    engine.run_pipeline(current_macro, historical_df, commodity_signals, technical_mrc, prev_weights)
+    results = engine.run_pipeline(current_macro, historical_df, commodity_signals, technical_mrc, prev_weights)
+    print_pipeline_results(results)
 
     write_live_outputs(base_dir, current_macro, historical_df, commodity_signals, technical_mrc)
-    
