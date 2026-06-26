@@ -2,7 +2,7 @@
 
 A comprehensive, quantitative macroeconomic portfolio management system that builds data-driven portfolio allocations based on live macroeconomic indicators, market data, and technical health signals.
 
-**Deployed Website**: [Insert Link to Deployed Streamlit App Here]
+**Deployed Website**: https://dashboardpy-jgu35wnno6cv3ed5qm6uhe.streamlit.app/
 
 ## Project Overview
 
