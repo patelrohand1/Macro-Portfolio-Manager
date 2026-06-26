@@ -55,6 +55,15 @@ def apply_aliases_to_df(df):
 class LiveDataFeeder:
     def __init__(self, fred_api_key=None):
         # Initialize FRED. Pass your API key when instantiating if pulling live data.
+        if not fred_api_key:
+            # Try Streamlit Secrets first (for deployment)
+            try:
+                import streamlit as st
+                if "FRED_API_KEY" in st.secrets:
+                    fred_api_key = st.secrets["FRED_API_KEY"]
+            except Exception:
+                pass
+                
         fred_api_key = fred_api_key or os.getenv("FRED_API_KEY")
         self.fred = Fred(api_key=fred_api_key) if fred_api_key else None
 
