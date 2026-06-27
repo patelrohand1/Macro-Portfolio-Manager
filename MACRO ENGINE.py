@@ -15,6 +15,46 @@ class MacroEngine:
             "XLB": 0.01692, "XLRE": 0.01701, "XLU": 0.01926, "EEM": 0.05000,
             "IWM": 0.05000
         }
+        
+        self._update_live_neutral_weights()
+
+    def _update_live_neutral_weights(self):
+        """Attempts to fetch live S&P 500 sector weights using yfinance, normalized to 90%."""
+        try:
+            import yfinance as yf
+            spy = yf.Ticker("SPY")
+            if hasattr(spy, 'funds_data') and hasattr(spy.funds_data, 'sector_weightings'):
+                raw_weights = spy.funds_data.sector_weightings
+                
+                # Mapping from yfinance sector names to SPDR tickers
+                sector_map = {
+                    'communication_services': 'XLC',
+                    'consumer_cyclical': 'XLY',
+                    'consumer_defensive': 'XLP',
+                    'energy': 'XLE',
+                    'financial_services': 'XLF',
+                    'healthcare': 'XLV',
+                    'industrials': 'XLI',
+                    'technology': 'XLK',
+                    'basic_materials': 'XLB',
+                    'realestate': 'XLRE',
+                    'utilities': 'XLU'
+                }
+                
+                sp500_sum = sum(raw_weights.values())
+                if sp500_sum > 0:
+                    for yf_sec, weight in raw_weights.items():
+                        if yf_sec in sector_map:
+                            ticker = sector_map[yf_sec]
+                            # Normalize to 90% of total portfolio
+                            self.neutral_weights[ticker] = (weight / sp500_sum) * 0.90
+                            
+                    # Force EEM and IWM to 5% each
+                    self.neutral_weights["EEM"] = 0.05
+                    self.neutral_weights["IWM"] = 0.05
+                    print("Successfully updated live neutral weights from yfinance.")
+        except Exception as e:
+            print(f"Failed to fetch live neutral weights, using defaults: {e}")
 
         self.sensitivity_matrix = pd.DataFrame({
             "XLC":  [1.5,  1.5,  1.5,   0.0,  0.0,  0.0],
