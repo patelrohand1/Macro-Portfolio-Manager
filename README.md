@@ -84,6 +84,7 @@ The Streamlit dashboard serves as the UI for the engine.
     *   **Radar & Bar Charts**: Visualize the z-scores for the 6 macroeconomic buckets.
     *   **Portfolio Allocations**: Grouped bar charts comparing the Neutral Weights vs. Final Recommended Weights, alongside a donut chart of the final composition.
     *   **Data Explorer**: Drill down into the underlying raw data, individual indicator z-scores, and commodity signals.
+    *   **Historical Portfolio Simulation & Comparison**: Select a custom historical start date to dynamically reverse-engineer the S&P 500 sector weights as of that date, and compare the cumulative returns of the simulated macroeconomic portfolio versus the S&P 500 (SPY) over time.
 
 ---
 
