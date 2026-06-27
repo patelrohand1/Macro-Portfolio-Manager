@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 from fredapi import Fred
 import warnings
+import datetime
 warnings.filterwarnings('ignore')
 
 # Load .env file so FRED_API_KEY is available via os.getenv
@@ -93,10 +94,16 @@ class LiveDataFeeder:
             return 0.0
         return max(-3.0, min(3.0, raw_pct / 10.0))
 
-    def _download_ticker_change(self, ticker, period="4mo"):
+    def _download_ticker_change(self, ticker, target_date=None, period="4mo"):
         """Download a single ticker and compute 3-month % change safely."""
         try:
-            df = yf.download(ticker, period=period, interval="1d", progress=False)
+            if target_date:
+                end_date = target_date + datetime.timedelta(days=1)
+                start_date = target_date - datetime.timedelta(days=120)
+                df = yf.download(ticker, start=start_date, end=end_date, interval="1d", progress=False)
+            else:
+                df = yf.download(ticker, period=period, interval="1d", progress=False)
+                
             if df.empty or len(df) < 2:
                 return None, None
 
@@ -120,26 +127,32 @@ class LiveDataFeeder:
         except Exception:
             return None, None
 
-    def fetch_market_data(self):
+    def fetch_market_data(self, target_date=None):
         """Pulls Commodities, FX, and Proxies via Yahoo Finance and returns scaled signals."""
         print("Fetching Yahoo Finance Market Data...")
 
         # Download each ticker individually for robustness
-        wti_price, wti_chg = self._download_ticker_change("CL=F")
-        copper_price, copper_chg = self._download_ticker_change("HG=F")
-        gold_price, gold_chg = self._download_ticker_change("GC=F")
-        bdry_price, bdry_chg = self._download_ticker_change("BDRY")
-        dxy_price, dxy_chg = self._download_ticker_change("DX-Y.NYB")
-        cny_price, cny_chg = self._download_ticker_change("CNY=X")
-        vix_price, _ = self._download_ticker_change("^VIX")
+        wti_price, wti_chg = self._download_ticker_change("CL=F", target_date)
+        copper_price, copper_chg = self._download_ticker_change("HG=F", target_date)
+        gold_price, gold_chg = self._download_ticker_change("GC=F", target_date)
+        bdry_price, bdry_chg = self._download_ticker_change("BDRY", target_date)
+        dxy_price, dxy_chg = self._download_ticker_change("DX-Y.NYB", target_date)
+        cny_price, cny_chg = self._download_ticker_change("CNY=X", target_date)
+        vix_price, _ = self._download_ticker_change("^VIX", target_date)
 
         # Copper/Gold ratio change
         cugold_raw_pct = None
         if copper_price and gold_price and gold_price != 0:
             try:
                 # Get historical ratio as well
-                df_cu = yf.download("HG=F", period="4mo", interval="1d", progress=False)
-                df_au = yf.download("GC=F", period="4mo", interval="1d", progress=False)
+                if target_date:
+                    end_date = target_date + datetime.timedelta(days=1)
+                    start_date = target_date - datetime.timedelta(days=120)
+                    df_cu = yf.download("HG=F", start=start_date, end=end_date, interval="1d", progress=False)
+                    df_au = yf.download("GC=F", start=start_date, end=end_date, interval="1d", progress=False)
+                else:
+                    df_cu = yf.download("HG=F", period="4mo", interval="1d", progress=False)
+                    df_au = yf.download("GC=F", period="4mo", interval="1d", progress=False)
                 if isinstance(df_cu.columns, pd.MultiIndex):
                     df_cu.columns = df_cu.columns.get_level_values(0)
                 if isinstance(df_au.columns, pd.MultiIndex):
@@ -301,7 +314,7 @@ class LiveDataFeeder:
             print(f"Live FRED feed unavailable: {exc}. Falling back to bundled macro CSV data.")
             return self._load_local_macro_data()
 
-    def fetch_technical_inputs(self, tickers):
+    def fetch_technical_inputs(self, tickers, target_date=None):
         """
         Calculates Price vs 200D MA and RSI using yfinance data.
         """
@@ -310,7 +323,12 @@ class LiveDataFeeder:
 
         for t in tickers:
             try:
-                df = yf.download(t, period="1y", interval="1d", progress=False)
+                if target_date:
+                    end_date = target_date + datetime.timedelta(days=1)
+                    start_date = target_date - datetime.timedelta(days=365)
+                    df = yf.download(t, start=start_date, end=end_date, interval="1d", progress=False)
+                else:
+                    df = yf.download(t, period="1y", interval="1d", progress=False)
                 if isinstance(df.columns, pd.MultiIndex):
                     df.columns = df.columns.get_level_values(0)
 

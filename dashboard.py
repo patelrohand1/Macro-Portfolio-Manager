@@ -130,6 +130,36 @@ def calculate_portfolio_returns(start_date, final_weights):
         "S&P 500 (SPY)": spy_cum_returns
     })
 
+@st.cache_data(ttl=3600)
+def get_historical_snapshot(start_date, _base_historical_df, tickers):
+    if start_date >= datetime.date.today():
+        return None
+        
+    hist_df = _base_historical_df.copy()
+    if not pd.api.types.is_datetime64_any_dtype(hist_df.index):
+        hist_df.index = pd.to_datetime(hist_df.index)
+        
+    target_ts = pd.Timestamp(start_date)
+    hist_df = hist_df[hist_df.index <= target_ts]
+    
+    if hist_df.empty:
+        return None
+        
+    current_macro = hist_df.iloc[-1].to_dict()
+    
+    local_feeder = LiveDataFeeder()
+    market_data = local_feeder.fetch_market_data(start_date)
+    technical_mrc = local_feeder.fetch_technical_inputs(tickers, start_date)
+    commodity_signals = market_data.get("Commodity_Signals", {})
+    
+    return {
+        "current_macro": current_macro,
+        "historical_df": hist_df,
+        "market_data": market_data,
+        "technical_mrc": technical_mrc,
+        "commodity_signals": commodity_signals
+    }
+
 def fetch_data():
     with st.spinner("Fetching Live Data (FRED & Yahoo Finance)..."):
         try:
@@ -173,16 +203,17 @@ def fetch_data():
             except Exception as inner_e:
                 st.error(f"Failed to load fallback data: {inner_e}")
 
-def run_engine_pipeline(neutral_weights_input):
-    if st.session_state.macro_data is None:
+def run_engine_pipeline(neutral_weights_input, data_override=None):
+    data = data_override if data_override is not None else st.session_state.macro_data
+    if data is None:
         st.warning("Please fetch data first!")
         return
+        
+    st.session_state.active_data = data
     
     with st.spinner("Running Macro Engine..."):
         # Update engine's neutral weights based on UI input
         engine.neutral_weights = neutral_weights_input
-        
-        data = st.session_state.macro_data
         # Prev weights just using current neutral for now, or could persist
         prev_weights = engine.neutral_weights 
         
@@ -221,10 +252,15 @@ st.sidebar.subheader("Neutral Weights (%)")
 start_date = st.sidebar.date_input("Start Date (for Historical Weights & Comparison)", value=datetime.date.today())
 
 if start_date < datetime.date.today():
-    with st.spinner("Calculating historical S&P 500 weights..."):
+    with st.spinner("Calculating historical S&P 500 weights & fetching data snapshot..."):
         base_neutral_weights = get_historical_weights(start_date, engine.neutral_weights)
+        if st.session_state.macro_data is not None:
+            historical_snapshot = get_historical_snapshot(start_date, st.session_state.macro_data["historical_df"], engine.tickers)
+        else:
+            historical_snapshot = None
 else:
     base_neutral_weights = engine.neutral_weights
+    historical_snapshot = None
 
 # Create inputs for neutral weights
 edited_neutral_weights = {}
@@ -249,13 +285,13 @@ if st.sidebar.button("▶ Run Engine", type="primary", use_container_width=True)
     if np.isclose(total_weight, 100.0, atol=0.01):
         # Re-normalize just to be safe
         normalized = {k: v / sum(edited_neutral_weights.values()) for k, v in edited_neutral_weights.items()}
-        run_engine_pipeline(normalized)
+        run_engine_pipeline(normalized, historical_snapshot)
     else:
         st.sidebar.error("Cannot run: Weights do not sum to 100%")
 
 # Run once automatically if results are empty and weights are valid
 if st.session_state.engine_results is None and np.isclose(total_weight, 100.0, atol=0.01):
-    run_engine_pipeline(edited_neutral_weights)
+    run_engine_pipeline(edited_neutral_weights, historical_snapshot)
 
 # --- MAIN DASHBOARD AREA ---
 if st.session_state.engine_results is not None:
@@ -415,8 +451,9 @@ if st.session_state.engine_results is not None:
     with tab1:
         # Build a dataframe of all metrics, their current values, and their buckets
         metrics_data = []
-        historical_df = st.session_state.macro_data["historical_df"]
-        current_data = st.session_state.macro_data["current_macro"]
+        active_data = st.session_state.active_data
+        historical_df = active_data["historical_df"]
+        current_data = active_data["current_macro"]
         
         for spec in engine.indicator_specs:
             metric = spec["metric"]
@@ -454,7 +491,8 @@ if st.session_state.engine_results is not None:
                     )
     
     with tab2:
-        comm_data = st.session_state.macro_data["commodity_signals"]
+        active_data = st.session_state.active_data
+        comm_data = active_data["commodity_signals"]
         
         # Gauges
         c1, c2, c3 = st.columns(3)
@@ -482,7 +520,7 @@ if st.session_state.engine_results is not None:
             make_indicator("CuGold Signal", comm_data.get("CuGold_Signal", 0))
             
         st.markdown("#### Raw Market Data")
-        raw_market = st.session_state.macro_data["market_data"]
+        raw_market = active_data["market_data"]
         raw_market_flat = [{"Metric": k, "Value": v} for k, v in raw_market.items() if k != "Commodity_Signals" and v is not None]
         if raw_market_flat:
             st.dataframe(pd.DataFrame(raw_market_flat), use_container_width=True)
