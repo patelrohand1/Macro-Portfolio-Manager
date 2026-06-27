@@ -8,7 +8,8 @@ import os
 import yfinance as yf
 import datetime
 
-# Import modules
+import live_data_feeder
+importlib.reload(live_data_feeder)
 from live_data_feeder import LiveDataFeeder, apply_aliases_to_dict, apply_aliases_to_df
 macro_engine_module = importlib.import_module("MACRO ENGINE")
 MacroEngine = macro_engine_module.MacroEngine
