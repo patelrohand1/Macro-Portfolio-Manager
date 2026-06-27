@@ -53,6 +53,36 @@ def apply_aliases_to_df(df):
     return df
 
 
+class EventCalendarFilter:
+    def __init__(self):
+        # Major upcoming fixed macro events can be fetched or hardcoded per month
+        # In a production script, you can scrape an open source RSS feed or use free APIs
+        pass
+
+    def check_event_risk(self, hold_period_days=14):
+        """
+        Scans a forward-looking window for market-moving 'Catalyst Nodes'
+        """
+        today = datetime.date.today()
+        end_window = today + datetime.timedelta(days=hold_period_days)
+        
+        # Example: Inputting the known high-impact nodes for the active cycle
+        # (e.g., Worsh's June FOMC, CPI, upcoming NFP)
+        high_impact_events = {
+            "FOMC Interest Rate Decision": datetime.date(2026, 6, 17),
+            "US CPI Inflation Print": datetime.date(2026, 7, 10),
+            "Nonfarm Payrolls (NFP)": datetime.date(2026, 7, 3),
+        }
+        
+        active_risks = []
+        for event, event_date in high_impact_events.items():
+            if today <= event_date <= end_window:
+                days_until = (event_date - today).days
+                active_risks.append({"Event": event, "Days_Until": days_until})
+                
+        return active_risks
+
+
 class LiveDataFeeder:
     def __init__(self, fred_api_key=None):
         # Initialize FRED. Pass your API key when instantiating if pulling live data.

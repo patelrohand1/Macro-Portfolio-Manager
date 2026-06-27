@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from live_data_feeder import LiveDataFeeder, apply_aliases_to_dict, apply_aliases_to_df
+from live_data_feeder import LiveDataFeeder, apply_aliases_to_dict, apply_aliases_to_df, EventCalendarFilter
 
 
 class MacroEngine:
@@ -306,6 +306,22 @@ class MacroEngine:
         mrc_mults = self.process_mrc(tech_data, raw_tilts)
         prelim_weights = {t: self.neutral_weights[t] + (raw_tilts[t] * mrc_mults[t]) for t in self.tickers}
         final_weights, turnover = self.apply_risk_controls(prelim_weights, prev_weights)
+
+        # Apply Event Calendar Risk Filter
+        active_threats = EventCalendarFilter().check_event_risk(hold_period_days=14)
+        if len(active_threats) > 0:
+            event_shrink_factor = 0.5 
+            print(f"⚠️ CALENDAR ALERT: {active_threats[0]['Event']} in {active_threats[0]['Days_Until']} days. De-risking active tilts.")
+            
+            for ticker in final_weights:
+                # Forcibly drag recommended allocations closer back to your safe neutral anchors
+                tilt = final_weights[ticker] - self.neutral_weights[ticker]
+                final_weights[ticker] = self.neutral_weights[ticker] + (tilt * event_shrink_factor)
+
+            # Re-normalize just to ensure weights sum to 1.0 after shrinking tilts
+            total_weight = sum(final_weights.values())
+            for ticker in final_weights:
+                final_weights[ticker] /= total_weight
 
         results = []
         for t in self.tickers:

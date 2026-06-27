@@ -10,7 +10,7 @@ import datetime
 
 import live_data_feeder
 importlib.reload(live_data_feeder)
-from live_data_feeder import LiveDataFeeder, apply_aliases_to_dict, apply_aliases_to_df
+from live_data_feeder import LiveDataFeeder, apply_aliases_to_dict, apply_aliases_to_df, EventCalendarFilter
 macro_engine_module = importlib.import_module("MACRO ENGINE")
 MacroEngine = macro_engine_module.MacroEngine
 
@@ -289,6 +289,15 @@ if st.session_state.engine_results is not None:
     df_results = results["results_df"].copy()
     df_results.index = df_results.index.map(lambda x: TICKER_NAMES.get(x, x))
     
+    # --- RISK BANNER ---
+    active_threats = EventCalendarFilter().check_event_risk()
+    
+    if active_threats:
+        for threat in active_threats:
+            st.error(f"🚨 **Macro Catalyst Node Detected:** {threat['Event']} is occurring in **{threat['Days_Until']} days**. Portfolio engine has systematically throttled active tilts to preserve capital.")
+    else:
+        st.success("✅ **Clear Horizon:** No major high-impact macro data nodes inside the 14-day tracking window.")
+
     # 1. Regime Banner
     regime_colors = {
         "Reflationary Boom": "#2e7d32", # Green
