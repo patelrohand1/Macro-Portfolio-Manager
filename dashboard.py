@@ -132,23 +132,13 @@ def calculate_portfolio_returns(start_date, final_weights):
     })
 
 @st.cache_data(ttl=3600)
-def get_historical_snapshot(start_date, _base_historical_df, tickers):
+def get_historical_snapshot(start_date, tickers):
     if start_date >= datetime.date.today():
         return None
         
-    hist_df = _base_historical_df.copy()
-    if not pd.api.types.is_datetime64_any_dtype(hist_df.index):
-        hist_df.index = pd.to_datetime(hist_df.index)
-        
-    target_ts = pd.Timestamp(start_date)
-    hist_df = hist_df[hist_df.index <= target_ts]
-    
-    if hist_df.empty:
-        return None
-        
-    current_macro = hist_df.iloc[-1].to_dict()
-    
     local_feeder = LiveDataFeeder()
+    
+    current_macro, hist_df = local_feeder.fetch_macro_inputs(start_date)
     market_data = local_feeder.fetch_market_data(start_date)
     technical_mrc = local_feeder.fetch_technical_inputs(tickers, start_date)
     commodity_signals = market_data.get("Commodity_Signals", {})
@@ -255,10 +245,7 @@ start_date = st.sidebar.date_input("Start Date (for Historical Weights & Compari
 if start_date < datetime.date.today():
     with st.spinner("Calculating historical S&P 500 weights & fetching data snapshot..."):
         base_neutral_weights = get_historical_weights(start_date, engine.neutral_weights)
-        if st.session_state.macro_data is not None:
-            historical_snapshot = get_historical_snapshot(start_date, st.session_state.macro_data["historical_df"], engine.tickers)
-        else:
-            historical_snapshot = None
+        historical_snapshot = get_historical_snapshot(start_date, engine.tickers)
 else:
     base_neutral_weights = engine.neutral_weights
     historical_snapshot = None

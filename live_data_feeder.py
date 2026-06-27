@@ -203,7 +203,7 @@ class LiveDataFeeder:
         
         return market_data
 
-    def fetch_macro_inputs(self):
+    def fetch_macro_inputs(self, target_date=None):
         """
         Fetches live FRED data and historical FRED data, 
         and strictly transforms historical levels into YoY% and 3Mo Averages 
@@ -245,7 +245,11 @@ class LiveDataFeeder:
             for name, series_id in series_map.items():
                 try:
                     # Pull 15 years of history to ensure we have enough data after pct_change drops
-                    raw_historical_data[name] = self.fred.get_series(series_id, observation_start='2010-01-01')
+                    if target_date:
+                        obs_end = target_date.strftime('%Y-%m-%d')
+                        raw_historical_data[name] = self.fred.get_series(series_id, observation_start='2010-01-01', observation_end=obs_end)
+                    else:
+                        raw_historical_data[name] = self.fred.get_series(series_id, observation_start='2010-01-01')
                 except Exception as e:
                     print(f"Warning: Could not fetch {series_id} ({name}): {e}")
 
