@@ -5,6 +5,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import importlib
 import os
+import yfinance as yf
+import datetime
 
 # Import modules
 from live_data_feeder import LiveDataFeeder, apply_aliases_to_dict, apply_aliases_to_df
@@ -48,6 +50,85 @@ if 'engine_results' not in st.session_state:
     st.session_state.engine_results = None
 if 'base_dir' not in st.session_state:
     st.session_state.base_dir = os.path.dirname(os.path.abspath(__file__))
+
+@st.cache_data(ttl=3600)
+def get_historical_weights(start_date, current_neutral_weights):
+    if start_date >= datetime.date.today():
+        return current_neutral_weights
+    
+    sp500_sectors = ["XLC", "XLY", "XLP", "XLE", "XLF", "XLV", "XLI", "XLK", "XLB", "XLRE", "XLU"]
+    other_tickers = [t for t in current_neutral_weights if t not in sp500_sectors]
+    
+    try:
+        data = yf.download(sp500_sectors, start=start_date, progress=False)["Close"]
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+    except Exception:
+        return current_neutral_weights
+        
+    if data.empty or len(data) < 2:
+        return current_neutral_weights
+    
+    start_prices = data.iloc[0].dropna()
+    end_prices = data.iloc[-1].dropna()
+    
+    historical_weights = {}
+    total_sp500_current_weight = sum(current_neutral_weights[t] for t in sp500_sectors)
+    
+    raw_historical = {}
+    for t in sp500_sectors:
+        if t in start_prices and t in end_prices and start_prices[t] > 0:
+            ret = end_prices[t] / start_prices[t]
+            raw_historical[t] = current_neutral_weights[t] / ret
+        else:
+            raw_historical[t] = current_neutral_weights[t]
+            
+    sum_raw = sum(raw_historical.values())
+    if sum_raw > 0:
+        for t in sp500_sectors:
+            historical_weights[t] = (raw_historical[t] / sum_raw) * total_sp500_current_weight
+    else:
+        for t in sp500_sectors:
+            historical_weights[t] = current_neutral_weights[t]
+            
+    for t in other_tickers:
+        historical_weights[t] = current_neutral_weights[t]
+        
+    return historical_weights
+
+@st.cache_data(ttl=3600)
+def calculate_portfolio_returns(start_date, final_weights):
+    if start_date >= datetime.date.today():
+        return None
+        
+    tickers = list(final_weights.keys()) + ["SPY"]
+    try:
+        data = yf.download(tickers, start=start_date, progress=False)["Close"]
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+    except Exception:
+        return None
+        
+    if data.empty or len(data) < 2:
+        return None
+        
+    # Calculate daily returns
+    returns = data.pct_change().dropna()
+    
+    # Portfolio return is the weighted sum of sector returns using final_weights
+    portfolio_daily_returns = pd.Series(0.0, index=returns.index)
+    for t in final_weights:
+        if t in returns.columns:
+            portfolio_daily_returns += returns[t] * final_weights[t]
+            
+    # Calculate cumulative returns
+    portfolio_cum_returns = (1 + portfolio_daily_returns).cumprod() - 1
+    spy_cum_returns = (1 + returns["SPY"]).cumprod() - 1 if "SPY" in returns.columns else pd.Series(0.0, index=returns.index)
+    
+    return pd.DataFrame({
+        "Portfolio": portfolio_cum_returns,
+        "S&P 500 (SPY)": spy_cum_returns
+    })
 
 def fetch_data():
     with st.spinner("Fetching Live Data (FRED & Yahoo Finance)..."):
@@ -137,6 +218,14 @@ if st.session_state.macro_data is None:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Neutral Weights (%)")
 
+start_date = st.sidebar.date_input("Start Date (for Historical Weights & Comparison)", value=datetime.date.today())
+
+if start_date < datetime.date.today():
+    with st.spinner("Calculating historical S&P 500 weights..."):
+        base_neutral_weights = get_historical_weights(start_date, engine.neutral_weights)
+else:
+    base_neutral_weights = engine.neutral_weights
+
 # Create inputs for neutral weights
 edited_neutral_weights = {}
 total_weight = 0.0
@@ -144,7 +233,7 @@ total_weight = 0.0
 # Two columns for compact layout in sidebar
 col1, col2 = st.sidebar.columns(2)
 for i, ticker in enumerate(engine.tickers):
-    current_val = engine.neutral_weights[ticker] * 100
+    current_val = base_neutral_weights[ticker] * 100
     with (col1 if i % 2 == 0 else col2):
         label = TICKER_NAMES.get(ticker, ticker)
         val = st.number_input(f"{label}", min_value=0.0, max_value=100.0, value=float(current_val), step=1.0, format="%.2f")
@@ -296,7 +385,29 @@ if st.session_state.engine_results is not None:
 
     st.markdown("---")
     
-    # 4. Data Explorer & Commodities
+    # 4. Historical Performance Comparison
+    st.subheader("Historical Performance Comparison")
+    
+    if start_date < datetime.date.today():
+        with st.spinner("Calculating historical performance..."):
+            perf_df = calculate_portfolio_returns(start_date, results["final_weights"])
+            
+        if perf_df is not None:
+            fig_perf = px.line(
+                perf_df, 
+                title=f"Portfolio vs S&P 500 (Since {start_date})",
+                labels={"value": "Cumulative Return", "index": "Date", "variable": "Strategy"}
+            )
+            fig_perf.update_layout(yaxis_tickformat='.1%')
+            st.plotly_chart(fig_perf, use_container_width=True)
+        else:
+            st.info("Not enough historical data to compute performance.")
+    else:
+        st.info("Select a past 'Start Date' in the sidebar to view historical performance comparison.")
+
+    st.markdown("---")
+    
+    # 5. Data Explorer & Commodities
     st.subheader("Underlying Data Explorer")
     
     tab1, tab2 = st.tabs(["Macro Bucket Metrics", "Commodity & FX Signals"])
