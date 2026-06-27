@@ -439,9 +439,9 @@ if st.session_state.engine_results is not None:
     with tab1:
         # Build a dataframe of all metrics, their current values, and their buckets
         metrics_data = []
-        active_data = st.session_state.active_data
-        historical_df = active_data["historical_df"]
-        current_data = active_data["current_macro"]
+        display_data = historical_snapshot if historical_snapshot else st.session_state.macro_data
+        historical_df = display_data["historical_df"]
+        current_data = display_data["current_macro"]
         
         for spec in engine.indicator_specs:
             metric = spec["metric"]
@@ -479,8 +479,8 @@ if st.session_state.engine_results is not None:
                     )
     
     with tab2:
-        active_data = st.session_state.active_data
-        comm_data = active_data["commodity_signals"]
+        display_data = historical_snapshot if historical_snapshot else st.session_state.macro_data
+        comm_data = display_data["commodity_signals"]
         
         # Gauges
         c1, c2, c3 = st.columns(3)
@@ -508,7 +508,7 @@ if st.session_state.engine_results is not None:
             make_indicator("CuGold Signal", comm_data.get("CuGold_Signal", 0))
             
         st.markdown("#### Raw Market Data")
-        raw_market = active_data["market_data"]
+        raw_market = display_data["market_data"]
         raw_market_flat = [{"Metric": k, "Value": v} for k, v in raw_market.items() if k != "Commodity_Signals" and v is not None]
         if raw_market_flat:
             st.dataframe(pd.DataFrame(raw_market_flat), use_container_width=True)
